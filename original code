@@ -1,161 +1,79 @@
-
-##ANGER##
-# Set working directory to the directory containing the files
-setwd("/data/netapp02/work/Manvi_Sethi/anger_csvs")
-
-# Get the list of all files in the directory
-anger_files <- list.files()
-anger_pids <- unique(gsub(".*_(F[0-9]+).*", "\\1", anger_files))
-
-epi_results <- lapply(anger_pids, function(i) {
-  # Get the file names for the mother and child for the EPI and PSI events
-  m_epi_file <- grep(paste0("anger_", i, "_m_epi.csv"), anger_files, value = TRUE)
-  c_epi_file <- grep(paste0("anger_", i, "_c_epi.csv"), anger_files, value = TRUE)
+process_emotion_event <- function(emotion, event) {
+  setwd(paste0("/data/netapp02/work/Manvi_Sethi/", emotion, "_csvs"))
   
-  # Check if all EPI files exist for this participant ID
-  if (length(m_epi_file) == 0 || length(c_epi_file) == 0) {
-    # Add an "error" message to the results list and skip to the next participant ID
-    return(list("file not found"))
+  files <- list.files()
+  pids <- unique(gsub(".*_(F[0-9]+).*", "\\1", files))
+  
+  results <- list()
+  
+  for (i in pids) {
+    m_file <- grep(paste0(emotion, "_", i, "_m_", event, ".csv"), files, value = TRUE)
+    c_file <- grep(paste0(emotion, "_", i, "_c_", event, ".csv"), files, value = TRUE)
+    
+    if (length(m_file) == 0 || length(c_file) == 0) {
+      results[[paste0(i, "_", emotion, "_", event)]] <- list("file not found")
+    } else {
+      m_data <- read.csv(m_file)
+      c_data <- read.csv(c_file)
+      
+      ccf_res <- ccf(c_data[[emotion]], m_data[[emotion]], plot = FALSE)
+      
+      results[[paste0(i, "_", emotion, "_", event)]] <- ccf_res
+    }
   }
   
-  # Load the data from each file
-  m_epi_data <- read.csv(m_epi_file)
-  c_epi_data <- read.csv(c_epi_file)
-  
-  # Calculate the cross-correlation function for the 'anger' column for each pair of files
-  ccf_epi <- ccf(c_epi_data$anger, m_epi_data$anger, plot = FALSE)
-  
-  # Return the results from this iteration
-  return(list(ccf_epi))
-})
+  return(results)
+}
 
-psi_results <- lapply(anger_pids, function(i) {
-  # Get the file names for the mother and child for the PSI events
-  m_psi_file <- grep(paste0("anger_", i, "_m_psi.csv"), anger_files, value = TRUE)
-  c_psi_file <- grep(paste0("anger_", i, "_c_psi.csv"), anger_files, value = TRUE)
-  
-  # Check if all PSI files exist for this participant ID
-  if (length(m_psi_file) == 0 || length(c_psi_file) == 0) {
-    # Add an "error" message to the results list and skip to the next participant ID
-    return(list("file not found"))
+# Process data for each emotion and event
+emotions <- c("anger", "happiness", "sadness")
+events <- c("epi", "psi")
+
+results <- list()
+
+for (e in emotions) {
+  for (ev in events) {
+    emotion_event_results <- process_emotion_event(e, ev)
+    results <- c(results, emotion_event_results)
+  }
+}
+
+# Initialize results_summary list
+results_summary <- list()
+
+# Loop through the results list
+for (name in names(results)) {
+  # Check if the entry has "file not found" value
+  if (identical(results[[name]], list("file not found"))) {
+    max_corr <- NA
+    max_lag <- NA
+  } else {
+    # Find the index of maximum absolute correlation
+    max_index <- which.max(abs(results[[name]]$acf))
+    
+    # Get the maximum correlation and corresponding lag
+    max_corr <- results[[name]]$acf[max_index]
+    max_lag <- results[[name]]$lag[max_index]
   }
   
-  # Load the data from each file
-  m_psi_data <- read.csv(m_psi_file)
-  c_psi_data <- read.csv(c_psi_file)
-  
-  # Calculate the cross-correlation function for the 'anger' column for each pair of files
-  ccf_psi <- ccf(c_psi_data$anger, m_psi_data$anger, plot = FALSE)
-  
-  # Return the results from this iteration
-  return(list(ccf_psi))
-})
+  # Add the summary to the results_summary list
+  results_summary[[name]] <- list(max_correlation = max_corr, lag = max_lag)
+}
 
-##HAPPINESS##
-# Set working directory to the directory containing the files
-setwd("/data/netapp02/work/Manvi_Sethi/happiness_csvs")
+# Convert results_summary list to a data frame
+results_summary_df <- do.call(rbind, lapply(results_summary, data.frame))
 
-# Get the list of all files in the directory
-happiness_files <- list.files()
-happiness_pids <- unique(gsub(".*_(F[0-9]+).*", "\\1", happiness_files))
+# Add row names as a new column called 'name'
+results_summary_df$name <- rownames(results_summary_df)
 
-epi_results <- lapply(happiness_pids, function(i) {
-  # Get the file names for the mother and child for the EPI and PSI events
-  m_epi_file <- grep(paste0("happiness_", i, "_m_epi.csv"), happiness_files, value = TRUE)
-  c_epi_file <- grep(paste0("happiness_", i, "_c_epi.csv"), happiness_files, value = TRUE)
-  
-  # Check if all EPI files exist for this participant ID
-  if (length(m_epi_file) == 0 || length(c_epi_file) == 0) {
-    # Add an "error" message to the results list and skip to the next participant ID
-    return(list("file not found"))
-  }
-  
-  # Load the data from each file
-  m_epi_data <- read.csv(m_epi_file)
-  c_epi_data <- read.csv(c_epi_file)
-  
-  # Calculate the cross-correlation function for the 'happiness' column for each pair of files
-  ccf_epi <- ccf(c_epi_data$happiness, m_epi_data$happiness, plot = FALSE)
-  
-  # Return the results from this iteration
-  return(list(ccf_epi))
-})
+# Reset row names
+rownames(results_summary_df) <- NULL
 
-psi_results <- lapply(happiness_pids, function(i) {
-  # Get the file names for the mother and child for the PSI events
-  m_psi_file <- grep(paste0("happiness_", i, "_m_psi.csv"), happiness_files, value = TRUE)
-  c_psi_file <- grep(paste0("happiness_", i, "_c_psi.csv"), happiness_files, value = TRUE)
-  
-  # Check if all PSI files exist for this participant ID
-  if (length(m_psi_file) == 0 || length(c_psi_file) == 0) {
-    # Add an "error" message to the results list and skip to the next participant ID
-    return(list("file not found"))
-  }
-  
-  # Load the data from each file
-  m_psi_data <- read.csv(m_psi_file)
-  c_psi_data <- read.csv(c_psi_file)
-  
-  # Calculate the cross-correlation function for the 'happiness' column for each pair of files
-  ccf_psi <- ccf(c_psi_data$happiness, m_psi_data$happiness, plot = FALSE)
-  
-  # Return the results from this iteration
-  return(list(ccf_psi))
-})
+# Rearrange columns
+results_summary_df <- results_summary_df[, c("name", "max_correlation", "lag")]
 
-##SADNESS##
-# Set working directory to the directory containing the files
-setwd("/data/netapp02/work/Manvi_Sethi/sadness_csvs")
-
-# Get the list of all files in the directory
-sadness_files <- list.files()
-sadness_pids <- unique(gsub(".*_(F[0-9]+).*", "\\1", sadness_files))
-
-epi_results <- lapply(sadness_pids, function(i) {
-  # Get the file names for the mother and child for the EPI and PSI events
-  m_epi_file <- grep(paste0("sadness_", i, "_m_epi.csv"), sadness_files, value = TRUE)
-  c_epi_file <- grep(paste0("sadness_", i, "_c_epi.csv"), sadness_files, value = TRUE)
-  
-  # Check if all EPI files exist for this participant ID
-  if (length(m_epi_file) == 0 || length(c_epi_file) == 0) {
-    # Add an "error" message to the results list and skip to the next participant ID
-    return(list("file not found"))
-  }
-  
-  # Load the data from each file
-  m_epi_data <- read.csv(m_epi_file)
-  c_epi_data <- read.csv(c_epi_file)
-  
-  # Calculate the cross-correlation function for the 'sadness' column for each pair of files
-  ccf_epi <- ccf(c_epi_data$sadness, m_epi_data$sadness, plot = FALSE)
-  
-  # Return the results from this iteration
-  return(list(ccf_epi))
-})
-
-psi_results <- lapply(sadness_pids, function(i) {
-  # Get the file names for the mother and child for the PSI events
-  m_psi_file <- grep(paste0("sadness_", i, "_m_psi.csv"), sadness_files, value = TRUE)
-  c_psi_file <- grep(paste0("sadness_", i, "_c_psi.csv"), sadness_files, value = TRUE)
-  
-  # Check if all PSI files exist for this participant ID
-  if (length(m_psi_file) == 0 || length(c_psi_file) == 0) {
-    # Add an "error" message to the results list and skip to the next participant ID
-    return(list("file not found"))
-  }
-  
-  # Load the data from each file
-  m_psi_data <- read.csv(m_psi_file)
-  c_psi_data <- read.csv(c_psi_file)
-  
-  # Calculate the cross-correlation function for the 'sadness' column for each pair of files
-  ccf_psi <- ccf(c_psi_data$sadness, m_psi_data$sadness, plot = FALSE)
-  
-  # Return the results from this iteration
-  return(list(ccf_psi))
-})
-
-
-
+# Separate the 'name' column based on the "_" delimiter
+results_summary_df <- results_summary_df %>%
+  separate(name, c("pid", "emotion", "event"), sep = "_", remove = TRUE)
 
 
